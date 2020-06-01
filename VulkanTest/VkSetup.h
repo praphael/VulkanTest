@@ -67,7 +67,13 @@ void createSwapChain(_In_ VkPhysicalDevice physicalDevice,
 	_Out_ VkFormat* swapChainImageFormat,
 	_Out_ VkExtent2D* swapChainExtent);
 
+VkImageView createImageView(_In_ VkDevice device,
+	_In_ VkImage image,
+	_In_ VkFormat format);
+
 void createImageViews(_In_ VkDevice logicalDevice,
 	_In_ std::vector<VkImage>& swapChainImages,
 	_In_ VkFormat swapChainImageFormat,
 	_Out_ std::vector<VkImageView>& swapChainImageViews);
+
+

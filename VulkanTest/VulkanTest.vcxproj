@@ -153,6 +153,7 @@
     <ClCompile Include="VkSetup.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="stb_image.h" />
     <ClInclude Include="VkGraphics.h" />
     <ClInclude Include="VkSetup.h" />
   </ItemGroup>
