@@ -1,7 +1,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/euler_angles.hpp>
 
 #include "VkSetup.h"
 #include "VkGraphics.h"
@@ -13,27 +15,56 @@
 
 #include <chrono>
 
+// vertices list
+/// position, color, texture coordinates
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+
+    {{-2.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{-1.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{-1.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-2.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+
+    {{-0.5f, 1.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, 1.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 2.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 2.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+    
 };
 
 
 const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0
+    0, 1, 2, 2, 3, 0, 
+    4, 5, 6, 6, 7, 4,
+    8, 9, 10, 10, 11, 8,
 };
 
-struct UniformBufferObject {
+struct UniformBufferObject{
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
 };
 
+struct CameraFreeLook {
+    glm::vec3 pos;
+    glm::vec3 up;
+
+    float yaw = 0.0f;
+    float pitch = 0.0f;
+};
+
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
+const float FLY_SPEED = 0.005f;
+const float LOOK_SPEED = 0.5f;
+
+const float FOV = 45.0f;
+const float NEAR_CLIP = 0.1f;
+const float FAR_CLIP = 1000.0f;
 
 // const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -50,8 +81,13 @@ const std::vector<const char*> deviceExtensions = {
 };
 
 
+
 class HelloTriangleApplication {
 public:
+    static bool isKeyDown[2048];
+    static int mouseX;
+    static int mouseY;
+
     void run() {
         m_window = initWindow(800, 600, "Vulkan test");
         initVulkan();
@@ -310,10 +346,16 @@ private:
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), m_swapChainExtent.width / (float)m_swapChainExtent.height, 0.1f, 10.0f);
+        UniformBufferObject ubo;
+        float angle = time * glm::radians(90.0f);
+        // angle = 45.0f;
+        ubo.model = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 0.0f, 1.0f));
+        // ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::eulerAngleXZ(glm::radians(m_cam.pitch), glm::radians(m_cam.yaw));
+        ubo.view = glm::translate(ubo.view, -m_cam.pos);
+        // ubo.view = glm::lookAt(m_cam.pos, -m_cam.pos, m_cam.up);;
+
+        ubo.proj = glm::perspective(glm::radians(FOV), m_swapChainExtent.width / (float)m_swapChainExtent.height, NEAR_CLIP, FAR_CLIP);
 
         ubo.proj[1][1] *= -1;
 
@@ -495,6 +537,134 @@ private:
         }
     }
 
+    static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+    {
+        if (key < 2048) {
+            bool kd = (action == GLFW_PRESS) || (action == GLFW_REPEAT);
+            isKeyDown[key] = kd;
+            // std::cout << "Key " << key << " Down= " << kd;
+        }
+    }
+
+    void setupCamera() {
+        m_cam.pos = glm::vec3(0.0f, -5.0f, 5.0f);
+        m_cam.up = glm::vec3(0.0f, 0.0f, 1.0f);
+
+        m_cam.yaw = 0.0f;
+        m_cam.pitch = -45.0f;
+
+        /*
+        auto m = glm::mat4(1.0f);
+        std::cout << "m= " << std::endl;
+        for (int n = 0; n < 4; n++) {
+            std::cout << "\t" << m[n][0] << " " << m[n][1] << " " << m[n][2] << " " << m[n][3] << std::endl;
+        }
+        */
+    }
+
+   
+    void processInput() {
+        static bool firstTime = true;
+
+        glm::vec3 v(0.0f);
+        float theta = glm::radians(m_cam.yaw);
+        float phi = glm::radians(m_cam.pitch);
+        v[0] = cos(theta) * cos(phi);
+        v[1] = sin(theta) * cos(phi);
+        v[2] = sin(phi);
+
+        
+        // ubo.view = glm::translate(ubo.view, -m_cam.pos);
+
+        auto dir = v;
+        auto dir_side = glm::cross(v, m_cam.up);
+        if (isKeyDown[GLFW_KEY_W]) {
+            m_cam.pos += (FLY_SPEED * dir);
+            // m_cam.pos.x += WALK_SPEED;
+        }
+
+        if (isKeyDown[GLFW_KEY_S]) {
+            m_cam.pos -= (FLY_SPEED * dir);
+            // m_cam.pos.x -= WALK_SPEED;
+        }
+
+        if (isKeyDown[GLFW_KEY_A]) {
+            m_cam.pos -= dir_side * FLY_SPEED;
+        }
+
+        if (isKeyDown[GLFW_KEY_D]) {
+            m_cam.pos += dir_side * FLY_SPEED;
+        }
+
+        int mode = glfwGetInputMode(m_window, GLFW_CURSOR);
+        if (isKeyDown[GLFW_KEY_ESCAPE]) {
+            switch (mode) {
+            case GLFW_CURSOR_NORMAL: 
+                mode = GLFW_CURSOR_DISABLED;  
+                firstTime = true;  
+                break;
+            case GLFW_CURSOR_DISABLED:
+                mode = GLFW_CURSOR_NORMAL; 
+                break;
+            default: 
+                mode = GLFW_CURSOR_NORMAL;
+                break;
+            }
+            
+            glfwSetInputMode(m_window, GLFW_CURSOR, mode);
+        }
+
+
+        if (firstTime) {
+            m_mouseLastX = mouseX;
+            m_mouseLastY = mouseY;
+        }
+        
+        int dx = mouseX - m_mouseLastX;
+        int dy = m_mouseLastY - mouseY;
+
+        if (mode == GLFW_CURSOR_DISABLED) {
+            m_cam.yaw += dx * LOOK_SPEED;
+            m_cam.pitch += dy * LOOK_SPEED;
+            /*
+            if (m_cam.yaw > 360.0f)
+                m_cam.yaw -= 360.0f;
+            if (m_cam.yaw < 0)
+                m_cam.yaw = 360.0f - m_cam.yaw;
+                */
+            if (m_cam.pitch > 89.0f)
+                m_cam.pitch = 89.0f;
+            if (m_cam.pitch < -89.0f)
+                m_cam.pitch = -89.0f;
+
+            // std::cout << "dx= " << dx << " << dy= " << dy << std::endl;
+            // std::cout << "yaw= " << m_cam.yaw << " << pitch= " << m_cam.pitch << std::endl;
+        }
+
+        m_mouseLastX = mouseX;
+        m_mouseLastY = mouseY;
+
+        firstTime = false;
+    }
+
+    static void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
+    {
+        mouseX = xpos;
+        mouseY = ypos;
+    }
+
+
+    void setupInput() {
+        glfwSetKeyCallback(m_window, key_callback);
+        glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+        if (glfwRawMouseMotionSupported())
+            glfwSetInputMode(m_window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        else
+            std::cout << "Raw mouse motion not supported!";
+
+        glfwSetCursorPosCallback(m_window, cursor_position_callback);
+    }
 
     void initVulkan() {
         // initialize vulkan
@@ -570,6 +740,9 @@ private:
 
         createSemaphores();
         std::cout << "Semaphores created" << std::endl;
+
+        setupInput();
+        setupCamera();
     }
 
     void recreateSwapChain() {
@@ -716,6 +889,8 @@ private:
         while (!glfwWindowShouldClose(m_window)) {
             glfwPollEvents();
 
+            processInput();
+
             drawFrame();
 
             /*
@@ -789,8 +964,15 @@ private:
     VkImageView m_textureImageView;
     VkSampler m_textureSampler;
 
+    int m_mouseLastX;
+    int m_mouseLastY;
+
+    CameraFreeLook m_cam;
 };
 
+bool HelloTriangleApplication::isKeyDown[2048] = { false };
+int HelloTriangleApplication::mouseX = 0;
+int HelloTriangleApplication::mouseY = 0;
 int main() {
     HelloTriangleApplication app;
 
